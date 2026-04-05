@@ -6,7 +6,17 @@ export const dynamic = "force-dynamic";
 
 const baseUrl = "http://localhost:3000";
 
-const apiDocs = [
+interface ApiEndpoint {
+  id: string;
+  title: string;
+  method: string;
+  path: string;
+  summary: string;
+  curl: string;
+  notes?: string;
+}
+
+const apiDocs: ApiEndpoint[] = [
   {
     id: "list-keys",
     title: "1) 列出 Key",
@@ -84,7 +94,7 @@ const apiDocs = [
     notes:
       "重点接口：根据错误类型自动将 Key 调整为 COOLING / DISABLED / DEPLETED，并写入 usage_logs(fail)。",
   },
-] as const;
+];
 
 export default function ExternalApiDocsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(apiDocs[0]?.id ?? null);
