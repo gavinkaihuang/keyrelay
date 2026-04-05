@@ -180,7 +180,7 @@ export async function getKeys(): Promise<KeyListItem[]> {
       id: item.id,
       platform: item.platform as KeyListItem["platform"],
       name: item.name,
-      keyPreview: item.key_preview,
+      keyPreview: item.key_preview ?? "",
       status: normalizeKeyStatus(item.status),
       lastUsedAt: item.last_used_at.toISOString(),
       createdAt: item.created_at.toISOString(),
