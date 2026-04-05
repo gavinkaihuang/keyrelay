@@ -1,0 +1,212 @@
+1. 创建数据库和用户（在 psql 或 pgAdmin 中执行）：
+
+CREATE USER keyrelay WITH PASSWORD 'your_password';
+CREATE DATABASE keyrelay OWNER keyrelay;
+-- 开启 uuid-ossp 扩展（如使用 gen_random_uuid() 可跳过）
+\c keyrelay
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+2. 配置环境变量：
+
+cp .env.example .env
+# 编辑 .env，填入真实的数据库密码
+
+Prisma 7 说明：连接串不再写在 schema.prisma 中，而是由 prisma.config.ts 读取。
+
+3. 安装依赖并执行首次迁移：
+
+npm install prisma @prisma/client
+npx prisma migrate dev --name init
+
+4. （可选）查看生成的 SQL：
+
+npx prisma migrate diff \
+  --from-empty \
+  --to-schema-datamodel prisma/schema.prisma \
+  --script
+
+5. 验证连接与表结构：
+
+npx prisma db pull   # 从 DB 反向验证
+npx prisma studio    # 打开 Web 可视化界面
+
+6. 接口文档（标准版）
+
+6.1 基础约定
+
+Base URL：
+- 本地开发： http://localhost:3000
+
+认证：
+- 当前版本未启用鉴权。
+- 建议在生产环境为 /api/cron/* 增加鉴权（例如 Cron Secret、IP 白名单或网关层签名）。
+
+统一错误约定：
+- HTTP API 失败时建议返回：
+{
+  "success": false,
+  "code": "ERROR_CODE",
+  "message": "错误说明"
+}
+
+6.2 HTTP API
+
+接口名称：恢复冷却 Key
+方法与路径：GET /api/cron/recover-keys
+代码位置：app/api/cron/recover-keys/route.ts
+
+用途：
+- 查询并恢复所有 status = cooling 且 cooling_until < now() 的 Key。
+
+请求参数：
+- 无
+
+curl 示例：
+curl -X GET "http://localhost:3000/api/cron/recover-keys"
+
+成功响应（200）示例：
+{
+  "success": true,
+  "recovered": 3,
+  "message": "Recovered cooling keys",
+  "executedAt": "2026-04-05T13:40:00.000Z"
+}
+
+字段说明：
+- recovered: 本次被恢复为 active 的 Key 数量。
+- executedAt: 接口执行时间（ISO-8601）。
+
+6.3 应用服务接口（Server Actions）
+
+代码位置：app/actions/keys.ts
+
+说明：
+- 以下接口用于 Next.js App Router 内部调用（Server Actions）。
+- 非公开 HTTP endpoint，不建议由外部系统直接调用。
+
+接口名称：addKey(previousState, formData)
+用途：新增 Key（原始 Key 会加密后落库）。
+入参：
+- formData.platform: OpenAI | Claude | DeepSeek | Gemini
+- formData.secretKey: 原始 Key（必填）
+- formData.name: Key 别名（可选）
+返回示例：
+{
+  "success": true,
+  "message": "Key added."
+}
+错误场景：
+- 平台非法：Invalid platform.
+- secretKey 为空：Secret key is required.
+
+接口名称：getKeys()
+用途：获取 Key 列表，按 created_at 倒序。
+返回项字段：
+- id
+- platform
+- name
+- keyPreview
+- status
+- lastUsedAt
+- createdAt
+
+接口名称：deleteKey(id)
+用途：按 ID 删除 Key。
+入参：
+- id: UUID
+返回：
+- 无显式返回值（执行后触发页面缓存刷新）。
+
+接口名称：resetKeyStatus(id)
+用途：将 cooling 或 disabled 的 Key 重置为 active。
+入参：
+- id: UUID
+行为：
+- status -> active
+- cooling_until -> null
+- fail_count -> 0
+
+接口名称：dispatchKey(platform)
+用途：高可靠分发指定平台下一个可用 Key。
+入参：
+- platform: OpenAI | Claude | DeepSeek | Gemini
+筛选条件：
+- status = active
+- cooling_until IS NULL 或 cooling_until < now()
+分发策略：
+- 按 last_used_at 升序选择
+- 事务内使用行锁，避免并发重复分发
+- 返回前更新 last_used_at = 当前时间
+成功返回示例：
+{
+  "id": "uuid",
+  "platform": "OpenAI",
+  "name": "Primary GPT-Prod",
+  "secretKey": "<encrypted-value>",
+  "lastUsedAt": "2026-04-05T13:41:00.000Z"
+}
+错误约定：
+- 无可用 Key：No keys available
+- 平台非法：Invalid platform
+
+6.4 推荐外部调用接口（后续扩展）
+
+当前对外可直接调用的 HTTP 接口仅包含：
+- GET /api/cron/recover-keys
+
+如果后续需要提供真正的外部调用能力，建议新增：
+- POST /api/keys/dispatch
+- POST /api/keys
+- DELETE /api/keys/:id
+- POST /api/keys/:id/reset
+
+这样可以把 Server Actions 与开放 API 的边界分离，便于鉴权、审计和流量治理。
+
+7. 外部系统接入（已实现）
+
+7.1 鉴权
+
+所有外部接口需要 Token 鉴权：
+- Header: X-KeyRelay-Token: <YOUR_TOKEN>
+- 或 Header: Authorization: Bearer <YOUR_TOKEN>
+
+环境变量：
+- KEYRELAY_EXTERNAL_API_TOKEN
+
+7.2 已开放外部 API
+
+- GET /api/external/keys
+  - 用途：查询 Key 列表（支持 ?platform=OpenAI|Claude|DeepSeek|Gemini）
+
+- POST /api/external/keys
+  - 用途：新增 Key
+  - 请求体：
+    {
+      "platform": "OpenAI",
+      "name": "Primary GPT",
+      "secretKey": "sk-xxxx"
+    }
+
+- POST /api/external/keys/dispatch
+  - 用途：分发可用 Key（并发安全）
+  - 请求体：
+    {
+      "platform": "OpenAI"
+    }
+
+- DELETE /api/external/keys/:id
+  - 用途：删除 Key
+
+- POST /api/external/keys/:id/reset
+  - 用途：将 cooling / disabled 状态重置为 active
+
+7.3 调用说明界面
+
+页面地址：
+- /external-api-docs
+
+该页面包含：
+- 各接口 curl 示例
+- 请求头说明
+- 错误码说明
+
