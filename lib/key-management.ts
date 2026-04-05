@@ -2,7 +2,7 @@ export const platforms = ["OpenAI", "Claude", "DeepSeek", "Gemini"] as const;
 export const resettableStatuses = ["cooling", "disabled"] as const;
 
 export type Platform = (typeof platforms)[number];
-export type KeyStatus = "active" | (typeof resettableStatuses)[number];
+export type KeyStatus = "active" | (typeof resettableStatuses)[number] | "depleted";
 
 export type KeyListItem = {
   id: string;
@@ -37,4 +37,26 @@ export function maskSecretKey(secretKey: string) {
   }
 
   return `${secretKey.slice(0, 3)}-...${secretKey.slice(-4)}`;
+}
+
+export function normalizeKeyStatus(rawStatus: string): KeyStatus {
+  const value = rawStatus.trim().toLowerCase();
+
+  if (value === "active") {
+    return "active";
+  }
+
+  if (value === "cooling") {
+    return "cooling";
+  }
+
+  if (value === "disabled") {
+    return "disabled";
+  }
+
+  if (value === "depleted") {
+    return "depleted";
+  }
+
+  return "disabled";
 }

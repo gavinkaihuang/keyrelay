@@ -1,0 +1,2 @@
+ALTER TABLE "keys"
+ADD COLUMN IF NOT EXISTS "last_error" TEXT;

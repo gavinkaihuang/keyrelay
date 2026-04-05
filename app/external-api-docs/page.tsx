@@ -15,18 +15,39 @@ export default function ExternalApiDocsPage() {
             External API 调用说明
           </h1>
           <p className="mt-3 text-sm leading-7 text-stone-600 sm:text-base">
-            该页面用于第三方系统接入 KeyRelay。所有接口统一返回 JSON，且需要在请求头中携带
+            该页面用于第三方系统接入 KeyRelay。大部分外部接口需要在请求头中携带
             <span className="mx-1 rounded bg-stone-900 px-2 py-0.5 text-xs text-stone-50">
               X-KeyRelay-Token
+            </span>
+            ，而回调接口使用独立的
+            <span className="mx-1 rounded bg-stone-900 px-2 py-0.5 text-xs text-stone-50">
+              x-callback-token
             </span>
             。
           </p>
           <div className="mt-5 grid gap-3 rounded-2xl border border-black/6 bg-white/65 p-4 text-sm text-stone-700">
             <p>Base URL: {baseUrl}</p>
-            <p>Header: X-KeyRelay-Token: &lt;YOUR_TOKEN&gt;</p>
+            <p>Header (外部 API): X-KeyRelay-Token: &lt;YOUR_TOKEN&gt;</p>
+            <p>Header (回调 API): x-callback-token: &lt;CALLBACK_SECRET&gt;</p>
             <p>可选 Header: Authorization: Bearer &lt;YOUR_TOKEN&gt;</p>
             <p>环境变量: KEYRELAY_EXTERNAL_API_TOKEN</p>
+            <p>环境变量: CALLBACK_SECRET / CALLBACK_DEFAULT_PROJECT_NAME</p>
           </div>
+        </section>
+
+        <section className="panel rounded-[30px] border-2 border-teal-600/30 p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-stone-900">重点接口（其他系统必接）</h2>
+          <p className="mt-2 text-sm leading-7 text-stone-600 sm:text-base">
+            推荐调用链路：先调用
+            <span className="mx-1 rounded bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
+              /api/external/keys/dispatch
+            </span>
+            获取可用 Key；若下游 Gemini 返回错误，再调用
+            <span className="mx-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              /api/keys/callback
+            </span>
+            上报失败并自动管理 Key 生命周期。
+          </p>
         </section>
 
         <ApiCard
@@ -63,7 +84,7 @@ export default function ExternalApiDocsPage() {
     "platform": "OpenAI",
     "projectName": "order-service"
   }'`}
-          notes="并发安全：服务端会在事务内锁定并更新 last_used_at，避免重复分发。分发成功后会自动写入 usage_logs(success)。projectName 可选，默认 external-api。"
+          notes="重点接口：并发安全分发。服务端会事务内锁定并更新 last_used_at，避免重复分发。分发成功后会自动写入 usage_logs(success)。projectName 可选，默认 external-api。"
         />
 
         <ApiCard
@@ -81,6 +102,21 @@ export default function ExternalApiDocsPage() {
           curl={`curl -X POST "${baseUrl}/api/external/keys/<KEY_ID>/reset" \\
   -H "X-KeyRelay-Token: <YOUR_TOKEN>"`}
           notes="仅对 cooling / disabled 状态生效。"
+        />
+
+        <ApiCard
+          title="6) Gemini 错误回调（生命周期管理）"
+          method="POST"
+          path="/api/keys/callback"
+          curl={`curl -X POST "${baseUrl}/api/keys/callback" \\
+  -H "Content-Type: application/json" \\
+  -H "x-callback-token: <CALLBACK_SECRET>" \\
+  -d '{
+    "keyId": "<KEY_ID>",
+    "projectName": "gemini-worker-a",
+    "rawError": "RATE_LIMIT_EXCEEDED"
+  }'`}
+          notes="重点接口：根据错误类型自动将 Key 调整为 COOLING / DISABLED / DEPLETED，并写入 usage_logs(fail)。"
         />
 
         <section className="panel rounded-[30px] p-6 sm:p-8">

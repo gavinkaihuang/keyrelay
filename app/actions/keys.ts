@@ -8,6 +8,7 @@ import { encrypt } from "../../lib/encrypt";
 import {
   isPlatform,
   maskSecretKey,
+  normalizeKeyStatus,
   type ActionResult,
   type DispatchedKey,
   type KeyListItem,
@@ -180,7 +181,7 @@ export async function getKeys(): Promise<KeyListItem[]> {
       platform: item.platform as KeyListItem["platform"],
       name: item.name,
       keyPreview: item.key_preview,
-      status: item.status as KeyListItem["status"],
+      status: normalizeKeyStatus(item.status),
       lastUsedAt: item.last_used_at.toISOString(),
       createdAt: item.created_at.toISOString(),
     }));
@@ -209,7 +210,7 @@ export async function getKeys(): Promise<KeyListItem[]> {
       platform: item.platform as KeyListItem["platform"],
       name: item.name,
       keyPreview: maskSecretKey(item.secret_key),
-      status: item.status as KeyListItem["status"],
+      status: normalizeKeyStatus(item.status),
       lastUsedAt: item.last_used_at.toISOString(),
       createdAt: item.last_used_at.toISOString(),
     }));

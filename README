@@ -170,8 +170,13 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 - Header: X-KeyRelay-Token: <YOUR_TOKEN>
 - 或 Header: Authorization: Bearer <YOUR_TOKEN>
 
+回调接口（/api/keys/callback）使用独立鉴权：
+- Header: x-callback-token: <CALLBACK_SECRET>
+
 环境变量：
 - KEYRELAY_EXTERNAL_API_TOKEN
+- CALLBACK_SECRET
+- CALLBACK_DEFAULT_PROJECT_NAME（可选）
 
 7.2 已开放外部 API
 
@@ -194,6 +199,22 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
       "platform": "OpenAI"
     }
 
+- POST /api/keys/callback
+  - 用途：接收 Gemini 错误反馈，自动更新 Key 生命周期并写入 usage_logs(fail)
+  - 鉴权：x-callback-token = CALLBACK_SECRET
+  - 请求体：
+    {
+      "keyId": "14dfb243-91d6-4e42-8525-cd7bca56eb5a",
+      "projectName": "gemini-worker-a",
+      "rawError": "RATE_LIMIT_EXCEEDED"
+    }
+
+  - 处理规则：
+    - API_KEY_INVALID / PERMISSION_DENIED -> DISABLED
+    - RATE_LIMIT_EXCEEDED / 429 -> COOLING (5分钟)
+    - QUOTA_EXHAUSTED -> DEPLETED
+    - INTERNAL / SERVICE_UNAVAILABLE / 503 -> COOLING (30秒)
+
 - DELETE /api/external/keys/:id
   - 用途：删除 Key
 
@@ -209,6 +230,22 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 - 各接口 curl 示例
 - 请求头说明
 - 错误码说明
+
+7.4 重点接口（提供给其他系统）
+
+推荐调用链路（重点）：
+
+1. 获取可用 Key（重点）
+- POST /api/external/keys/dispatch
+- 作用：拿到一个当前可用 key（并发安全，自动更新 last_used_at）
+
+2. 上报使用失败回调（重点）
+- POST /api/keys/callback
+- 作用：当 Gemini 请求失败时，回调 KeyRelay 以自动管理 Key 状态（冷却/禁用/耗尽）
+
+建议调用时机：
+- 业务系统请求 Gemini 前先调用 dispatch 拿 key
+- 若 Gemini 返回错误，再调用 callback 上报 keyId + rawError
 
 8. 数据库重置（生产可用，默认关闭）
 

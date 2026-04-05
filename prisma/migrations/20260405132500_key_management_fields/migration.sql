@@ -1,6 +1,6 @@
 ALTER TABLE "keys"
-ADD COLUMN "key_preview" TEXT NOT NULL DEFAULT '',
-ADD COLUMN "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ADD COLUMN IF NOT EXISTS "key_preview" TEXT NOT NULL DEFAULT '',
+ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 UPDATE "keys"
 SET "key_preview" = CASE
@@ -8,4 +8,4 @@ SET "key_preview" = CASE
     ELSE left("secret_key", 3) || '-...' || right("secret_key", 4)
 END;
 
-CREATE INDEX "keys_created_at_idx" ON "keys"("created_at");
+CREATE INDEX IF NOT EXISTS "keys_created_at_idx" ON "keys"("created_at");

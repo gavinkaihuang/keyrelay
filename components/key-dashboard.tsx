@@ -35,6 +35,7 @@ const statusStyles: Record<KeyStatus, string> = {
   active: "bg-emerald-100 text-emerald-800 ring-emerald-600/15",
   cooling: "bg-amber-100 text-amber-900 ring-amber-700/15",
   disabled: "bg-stone-200 text-stone-700 ring-stone-600/10",
+  depleted: "bg-rose-100 text-rose-800 ring-rose-600/15",
 };
 
 const platformMeta: Record<Platform, { icon: typeof Orbit; tone: string }> = {
