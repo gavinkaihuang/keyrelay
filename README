@@ -210,3 +210,49 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 - 请求头说明
 - 错误码说明
 
+8. 数据库重置（生产可用，默认关闭）
+
+8.1 接口
+
+- POST /api/admin/reset-database
+
+用途：
+- 重新初始化运行数据（清空 keys 与 usage_logs）。
+
+重置范围：
+- usage_logs
+- keys
+
+说明：
+- 该接口不会删除 Prisma migration 记录，也不会改动数据库结构。
+- 如需“结构级重建”，请使用 Prisma Migrate 流程。
+
+8.2 安全开关
+
+必须同时满足以下条件才能执行：
+
+- KEYRELAY_ALLOW_DATABASE_RESET=true
+- KEYRELAY_DATABASE_RESET_TOKEN 已配置
+- 请求头携带 x-keyrelay-reset-token（或 Bearer Token）
+- 请求体包含 confirm = RESET_DATABASE
+
+8.3 示例
+
+curl -X POST "http://localhost:3000/api/admin/reset-database" \
+  -H "Content-Type: application/json" \
+  -H "X-KeyRelay-Reset-Token: <YOUR_RESET_TOKEN>" \
+  -d '{"confirm":"RESET_DATABASE"}'
+
+成功响应示例：
+{
+  "success": true,
+  "message": "Database data has been reinitialized.",
+  "resetScope": "keys + usage_logs",
+  "executedAt": "2026-04-05T16:00:00.000Z"
+}
+
+重置数据库
+curl -X POST "http://localhost:3000/api/admin/reset-database" \
+  -H "Content-Type: application/json" \
+  -H "X-KeyRelay-Reset-Token: <YOUR_RESET_TOKEN>" \
+  -d '{"confirm":"RESET_DATABASE"}'
