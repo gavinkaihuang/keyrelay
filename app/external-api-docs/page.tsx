@@ -6,7 +6,89 @@ export const dynamic = "force-dynamic";
 
 const baseUrl = "http://localhost:3000";
 
+const apiDocs = [
+  {
+    id: "list-keys",
+    title: "1) 列出 Key",
+    method: "GET",
+    path: "/api/external/keys",
+    summary: "查询当前 Key 列表，支持按平台过滤。",
+    curl: `curl -X GET "${baseUrl}/api/external/keys" \\
+  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`,
+    notes: "支持查询参数 platform=OpenAI|Claude|DeepSeek|Gemini。",
+  },
+  {
+    id: "create-key",
+    title: "2) 新增 Key",
+    method: "POST",
+    path: "/api/external/keys",
+    summary: "向 KeyRelay 写入新的可管理 Key。",
+    curl: `curl -X POST "${baseUrl}/api/external/keys" \\
+  -H "Content-Type: application/json" \\
+  -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
+  -d '{
+    "platform": "OpenAI",
+    "name": "Primary GPT",
+    "secretKey": "sk-xxxx"
+  }'`,
+  },
+  {
+    id: "dispatch-key",
+    title: "3) 分发可用 Key",
+    method: "POST",
+    path: "/api/external/keys/dispatch",
+    summary: "重点接口，分发一个当前可用 Key，并自动记录成功调用。",
+    curl: `curl -X POST "${baseUrl}/api/external/keys/dispatch" \\
+  -H "Content-Type: application/json" \\
+  -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
+  -d '{
+    "platform": "OpenAI",
+    "projectName": "order-service"
+  }'`,
+    notes:
+      "重点接口：并发安全分发。服务端会事务内锁定并更新 last_used_at，避免重复分发。分发成功后会自动写入 usage_logs(success)。projectName 可选，默认 external-api。",
+  },
+  {
+    id: "delete-key",
+    title: "4) 删除 Key",
+    method: "DELETE",
+    path: "/api/external/keys/:id",
+    summary: "删除指定 Key。",
+    curl: `curl -X DELETE "${baseUrl}/api/external/keys/<KEY_ID>" \\
+  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`,
+  },
+  {
+    id: "reset-key",
+    title: "5) 手动重置 Key 状态",
+    method: "POST",
+    path: "/api/external/keys/:id/reset",
+    summary: "将 cooling 或 disabled 的 Key 恢复为 active。",
+    curl: `curl -X POST "${baseUrl}/api/external/keys/<KEY_ID>/reset" \\
+  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`,
+    notes: "仅对 cooling / disabled 状态生效。",
+  },
+  {
+    id: "callback-key",
+    title: "6) Gemini 错误回调（生命周期管理）",
+    method: "POST",
+    path: "/api/keys/callback",
+    summary: "重点接口，按错误类型自动管理 Key 生命周期并记录失败日志。",
+    curl: `curl -X POST "${baseUrl}/api/keys/callback" \\
+  -H "Content-Type: application/json" \\
+  -H "x-callback-token: <CALLBACK_SECRET>" \\
+  -d '{
+    "keyId": "<KEY_ID>",
+    "projectName": "gemini-worker-a",
+    "rawError": "RATE_LIMIT_EXCEEDED"
+  }'`,
+    notes:
+      "重点接口：根据错误类型自动将 Key 调整为 COOLING / DISABLED / DEPLETED，并写入 usage_logs(fail)。",
+  },
+] as const;
+
 export default function ExternalApiDocsPage() {
+  const [expandedId, setExpandedId] = useState<string | null>(apiDocs[0]?.id ?? null);
+
   return (
     <main className="min-h-screen px-4 py-10 text-stone-900 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -50,74 +132,48 @@ export default function ExternalApiDocsPage() {
           </p>
         </section>
 
-        <ApiCard
-          title="1) 列出 Key"
-          method="GET"
-          path="/api/external/keys"
-          curl={`curl -X GET "${baseUrl}/api/external/keys" \\
-  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`}
-          notes="支持查询参数 platform=OpenAI|Claude|DeepSeek|Gemini。"
-        />
-
-        <ApiCard
-          title="2) 新增 Key"
-          method="POST"
-          path="/api/external/keys"
-          curl={`curl -X POST "${baseUrl}/api/external/keys" \\
-  -H "Content-Type: application/json" \\
-  -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
-  -d '{
-    "platform": "OpenAI",
-    "name": "Primary GPT",
-    "secretKey": "sk-xxxx"
-  }'`}
-        />
-
-        <ApiCard
-          title="3) 分发可用 Key"
-          method="POST"
-          path="/api/external/keys/dispatch"
-          curl={`curl -X POST "${baseUrl}/api/external/keys/dispatch" \\
-  -H "Content-Type: application/json" \\
-  -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
-  -d '{
-    "platform": "OpenAI",
-    "projectName": "order-service"
-  }'`}
-          notes="重点接口：并发安全分发。服务端会事务内锁定并更新 last_used_at，避免重复分发。分发成功后会自动写入 usage_logs(success)。projectName 可选，默认 external-api。"
-        />
-
-        <ApiCard
-          title="4) 删除 Key"
-          method="DELETE"
-          path="/api/external/keys/:id"
-          curl={`curl -X DELETE "${baseUrl}/api/external/keys/<KEY_ID>" \\
-  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`}
-        />
-
-        <ApiCard
-          title="5) 手动重置 Key 状态"
-          method="POST"
-          path="/api/external/keys/:id/reset"
-          curl={`curl -X POST "${baseUrl}/api/external/keys/<KEY_ID>/reset" \\
-  -H "X-KeyRelay-Token: <YOUR_TOKEN>"`}
-          notes="仅对 cooling / disabled 状态生效。"
-        />
-
-        <ApiCard
-          title="6) Gemini 错误回调（生命周期管理）"
-          method="POST"
-          path="/api/keys/callback"
-          curl={`curl -X POST "${baseUrl}/api/keys/callback" \\
-  -H "Content-Type: application/json" \\
-  -H "x-callback-token: <CALLBACK_SECRET>" \\
-  -d '{
-    "keyId": "<KEY_ID>",
-    "projectName": "gemini-worker-a",
-    "rawError": "RATE_LIMIT_EXCEEDED"
-  }'`}
-          notes="重点接口：根据错误类型自动将 Key 调整为 COOLING / DISABLED / DEPLETED，并写入 usage_logs(fail)。"
-        />
+        <section className="panel rounded-[30px] p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-stone-900">接口列表</h2>
+          <p className="mt-2 text-sm leading-7 text-stone-600 sm:text-base">
+            下面的列表按实际接入顺序整理，可直接展开查看每个接口的调用示例。
+          </p>
+          <div className="mt-5 grid gap-3">
+            {apiDocs.map((api) => (
+              <section
+                key={api.id}
+                className="rounded-2xl border border-black/8 bg-white/70 p-4 transition hover:border-teal-500/40 hover:bg-white"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-teal-100 px-2.5 py-1 text-xs font-semibold text-teal-800">
+                    {api.method}
+                  </span>
+                  <span className="rounded-full bg-stone-200 px-2.5 py-1 text-xs font-medium text-stone-700">
+                    {api.path}
+                  </span>
+                </div>
+                <h3 className="mt-3 text-base font-semibold text-stone-900">{api.title}</h3>
+                <p className="mt-1 text-sm text-stone-600">{api.summary}</p>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedId((current) => (current === api.id ? null : api.id))
+                    }
+                    className="rounded-full border border-teal-700/20 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition hover:bg-teal-100"
+                  >
+                    {expandedId === api.id ? "收起调用示例" : "查看调用示例"}
+                  </button>
+                </div>
+                {expandedId === api.id ? (
+                  <div className="mt-4 rounded-2xl border border-dashed border-black/10 bg-stone-50/80 p-4">
+                    <CodeBlock code={api.curl} />
+                    {api.notes ? <p className="mt-3 text-sm text-stone-600">{api.notes}</p> : null}
+                  </div>
+                ) : null}
+              </section>
+            ))}
+          </div>
+        </section>
 
         <section className="panel rounded-[30px] p-6 sm:p-8">
           <h2 className="text-xl font-semibold text-stone-900">统一错误格式</h2>
@@ -134,36 +190,6 @@ export default function ExternalApiDocsPage() {
         </section>
       </div>
     </main>
-  );
-}
-
-function ApiCard({
-  title,
-  method,
-  path,
-  curl,
-  notes,
-}: {
-  title: string;
-  method: string;
-  path: string;
-  curl: string;
-  notes?: string;
-}) {
-  return (
-    <section className="panel rounded-[30px] p-6 sm:p-8">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold text-stone-900">{title}</h2>
-        <span className="rounded-full bg-teal-100 px-2.5 py-1 text-xs font-semibold text-teal-800">
-          {method}
-        </span>
-        <span className="rounded-full bg-stone-200 px-2.5 py-1 text-xs font-medium text-stone-700">
-          {path}
-        </span>
-      </div>
-      <CodeBlock code={curl} />
-      {notes ? <p className="mt-3 text-sm text-stone-600">{notes}</p> : null}
-    </section>
   );
 }
 
