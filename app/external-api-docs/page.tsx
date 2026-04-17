@@ -72,10 +72,10 @@ const apiDocs: ApiEndpoint[] = [
     title: "5) 手动重置 Key 状态",
     method: "POST",
     path: "/api/external/keys/:id/reset",
-    summary: "将 cooling 或 disabled 的 Key 恢复为 active。",
+    summary: "将 cooling、disabled 或 depleted 的 Key 恢复为 active。",
     curl: `curl -X POST "${baseUrl}/api/external/keys/<KEY_ID>/reset" \\
   -H "X-KeyRelay-Token: <YOUR_TOKEN>"`,
-    notes: "仅对 cooling / disabled 状态生效。",
+    notes: "仅对 cooling / disabled / depleted 状态生效。",
   },
   {
     id: "callback-key",
@@ -92,7 +92,7 @@ const apiDocs: ApiEndpoint[] = [
     "rawError": "RATE_LIMIT_EXCEEDED"
   }'`,
     notes:
-      "重点接口：根据错误类型自动将 Key 调整为 COOLING / DISABLED / DEPLETED，并写入 usage_logs(fail)。",
+      "重点接口：根据错误类型自动将 Key 调整为 cooling / disabled / depleted，并写入 usage_logs(fail)。",
   },
 ];
 

@@ -6,7 +6,9 @@ export async function GET() {
 
   const result = await prisma.key.updateMany({
     where: {
-      status: "cooling",
+      status: {
+        in: ["cooling", "COOLING"],
+      },
       cooling_until: {
         lt: now,
       },

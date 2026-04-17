@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "recover:worker": "node scripts/recover-keys-worker.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",

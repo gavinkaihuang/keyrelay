@@ -28,7 +28,7 @@ export async function POST(
     where: {
       id,
       status: {
-        in: ["cooling", "disabled"],
+        in: ["cooling", "disabled", "depleted", "COOLING", "DISABLED", "DEPLETED"],
       },
     },
     data: {
@@ -42,7 +42,7 @@ export async function POST(
     return apiError(
       404,
       "NOT_FOUND",
-      "Key not found or not in cooling/disabled status",
+      "Key not found or not in cooling/disabled/depleted status",
     );
   }
 

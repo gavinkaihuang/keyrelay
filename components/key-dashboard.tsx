@@ -19,7 +19,6 @@ import Link from "next/link";
 import { addKey, deleteKey, resetKeyStatus, updateKey } from "../app/actions/keys";
 import {
   platforms,
-  resettableStatuses,
   type ActionResult,
   type KeyListItem,
   type KeyStatus,
@@ -52,6 +51,14 @@ function formatLastUsed(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function getResetConfirmMessage(item: KeyListItem) {
+  if (item.status === "depleted") {
+    return `确认恢复 Key「${item.name}」吗？\n当前状态为 depleted，恢复后会重新进入分发池。`;
+  }
+
+  return `确认恢复 Key「${item.name}」到 active 状态吗？`;
 }
 
 export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
@@ -201,7 +208,7 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                 {keys.map((item) => {
                   const meta = platformMeta[item.platform];
                   const Icon = meta.icon;
-                  const canReset = item.status === "cooling" || item.status === "disabled";
+                  const canReset = item.status !== "active";
 
                   return (
                     <tr key={item.id} className="border-t border-black/6 text-sm text-stone-700">
@@ -232,7 +239,14 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                             Edit
                           </button>
                           {canReset ? (
-                            <form action={resetKeyStatus.bind(null, item.id)}>
+                            <form
+                              action={resetKeyStatus.bind(null, item.id)}
+                              onSubmit={(event) => {
+                                if (!window.confirm(getResetConfirmMessage(item))) {
+                                  event.preventDefault();
+                                }
+                              }}
+                            >
                               <button
                                 type="submit"
                                 className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 px-3 py-2 text-xs font-medium text-stone-700 transition hover:bg-stone-900/5"

@@ -118,7 +118,7 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 - 无显式返回值（执行后触发页面缓存刷新）。
 
 接口名称：resetKeyStatus(id)
-用途：将 cooling 或 disabled 的 Key 重置为 active。
+用途：将 cooling、disabled 或 depleted 的 Key 重置为 active。
 入参：
 - id: UUID
 行为：
@@ -131,12 +131,12 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 入参：
 - platform: OpenAI | Claude | DeepSeek | Gemini
 筛选条件：
-- status = active
-- cooling_until IS NULL 或 cooling_until < now()
+- status = active，或 status = cooling 且 cooling_until < now()
 分发策略：
 - 按 last_used_at 升序选择
 - 事务内使用行锁，避免并发重复分发
 - 返回前更新 last_used_at = 当前时间
+- 若命中已过期 cooling key，会自动恢复为 active，并重置 fail_count = 0
 成功返回示例：
 {
   "id": "uuid",
@@ -219,7 +219,7 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
   - 用途：删除 Key
 
 - POST /api/external/keys/:id/reset
-  - 用途：将 cooling / disabled 状态重置为 active
+  - 用途：将 cooling / disabled / depleted 状态重置为 active
 
 7.3 调用说明界面
 
@@ -293,3 +293,31 @@ curl -X POST "http://localhost:3000/api/admin/reset-database" \
   -H "Content-Type: application/json" \
   -H "X-KeyRelay-Reset-Token: <YOUR_RESET_TOKEN>" \
   -d '{"confirm":"RESET_DATABASE"}'
+
+9. PM2 主机自动恢复配置（推荐）
+
+如果你是 PM2 部署，除了 Next 主进程，建议再启动一个常驻 worker，定时调用恢复接口：
+
+- worker 文件：scripts/recover-keys-worker.mjs
+- PM2 进程名：keyrelay-recover-worker
+- 默认行为：每 60 秒请求一次 /api/cron/recover-keys
+
+9.1 关键环境变量
+
+- KEYRELAY_BASE_URL：KeyRelay 访问地址（默认 http://127.0.0.1:3010）
+- KEYRELAY_RECOVER_INTERVAL_MS：恢复间隔毫秒（默认 60000）
+- KEYRELAY_RECOVER_TIMEOUT_MS：单次请求超时毫秒（默认 10000）
+
+9.2 启动与重载
+
+首次启动：
+pm2 start ecosystem.config.js
+
+修改配置后重载：
+pm2 reload ecosystem.config.js
+
+查看 worker 日志：
+pm2 logs keyrelay-recover-worker
+
+你应当能看到类似日志：
+[recover-worker] recovered=1 executedAt=2026-04-18T02:00:00.000Z

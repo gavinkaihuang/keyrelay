@@ -16,7 +16,7 @@ type ErrorAction = {
     | "QUOTA_EXHAUSTED"
     | "SERVICE_UNAVAILABLE"
     | "UNKNOWN";
-  status: "DISABLED" | "COOLING" | "DEPLETED";
+  status: "disabled" | "cooling" | "depleted";
   coolDownMs: number | null;
 };
 
@@ -50,7 +50,7 @@ function detectAction(rawErrorText: string): ErrorAction {
   if (upper.includes("API_KEY_INVALID") || upper.includes("PERMISSION_DENIED")) {
     return {
       code: "API_KEY_INVALID",
-      status: "DISABLED",
+      status: "disabled",
       coolDownMs: null,
     };
   }
@@ -58,7 +58,7 @@ function detectAction(rawErrorText: string): ErrorAction {
   if (upper.includes("RATE_LIMIT_EXCEEDED") || statusCode === 429) {
     return {
       code: "RATE_LIMIT_EXCEEDED",
-      status: "COOLING",
+      status: "cooling",
       coolDownMs: 5 * 60 * 1000,
     };
   }
@@ -66,7 +66,7 @@ function detectAction(rawErrorText: string): ErrorAction {
   if (upper.includes("QUOTA_EXHAUSTED")) {
     return {
       code: "QUOTA_EXHAUSTED",
-      status: "DEPLETED",
+      status: "depleted",
       coolDownMs: null,
     };
   }
@@ -78,14 +78,14 @@ function detectAction(rawErrorText: string): ErrorAction {
   ) {
     return {
       code: "SERVICE_UNAVAILABLE",
-      status: "COOLING",
+      status: "cooling",
       coolDownMs: 30 * 1000,
     };
   }
 
   return {
     code: "UNKNOWN",
-    status: "COOLING",
+    status: "cooling",
     coolDownMs: 30 * 1000,
   };
 }
@@ -121,7 +121,7 @@ function schemaHintMessage(missing: string[]) {
     "Key schema is missing required lifecycle fields.",
     `Missing columns: ${missing.join(", ")}.`,
     "Please update Prisma model Key to include:",
-    "- status: String (ACTIVE/COOLING/DISABLED/DEPLETED)",
+    "- status: String (active/cooling/disabled/depleted)",
     "- coolDownUntil: DateTime? (mapped to cool_down_until)",
     "- lastError: String? (mapped to last_error)",
   ].join(" ");

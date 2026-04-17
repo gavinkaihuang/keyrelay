@@ -1,8 +1,8 @@
 export const platforms = ["OpenAI", "Claude", "DeepSeek", "Gemini"] as const;
-export const resettableStatuses = ["cooling", "disabled"] as const;
+export const resettableStatuses = ["cooling", "disabled", "depleted"] as const;
 
 export type Platform = (typeof platforms)[number];
-export type KeyStatus = "active" | (typeof resettableStatuses)[number] | "depleted";
+export type KeyStatus = "active" | (typeof resettableStatuses)[number];
 
 export type KeyListItem = {
   id: string;

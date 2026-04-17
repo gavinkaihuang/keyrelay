@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
         FROM keys
         WHERE platform = ${platform}
           AND (
-            status = 'active'
-            OR (status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW())
+            LOWER(status) = 'active'
+            OR (LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW())
           )
         ORDER BY last_used_at ASC
         FOR UPDATE SKIP LOCKED
@@ -68,15 +68,15 @@ export async function POST(request: NextRequest) {
       await tx.$executeRaw`
         UPDATE keys
         SET status = CASE
-              WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 'active'
+              WHEN LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 'active'
               ELSE status
             END,
             cooling_until = CASE
-              WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN NULL
+              WHEN LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN NULL
               ELSE cooling_until
             END,
             fail_count = CASE
-              WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 0
+              WHEN LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 0
               ELSE fail_count
             END,
             last_used_at = ${now}
