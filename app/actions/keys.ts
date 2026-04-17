@@ -271,8 +271,10 @@ export async function dispatchKey(platform: string): Promise<DispatchedKey> {
       SELECT id, platform, name, secret_key
       FROM keys
       WHERE platform = ${platform}
-        AND status = 'active'
-        AND (cooling_until IS NULL OR cooling_until < NOW())
+        AND (
+          status = 'active'
+          OR (status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW())
+        )
       ORDER BY last_used_at ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1
@@ -288,7 +290,19 @@ export async function dispatchKey(platform: string): Promise<DispatchedKey> {
 
     await tx.$executeRaw`
       UPDATE keys
-      SET last_used_at = ${now}
+      SET status = CASE
+            WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 'active'
+            ELSE status
+          END,
+          cooling_until = CASE
+            WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN NULL
+            ELSE cooling_until
+          END,
+          fail_count = CASE
+            WHEN status = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW() THEN 0
+            ELSE fail_count
+          END,
+          last_used_at = ${now}
       WHERE id = ${selected.id}::uuid
     `;
 
