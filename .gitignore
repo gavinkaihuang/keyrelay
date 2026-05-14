@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# production/runtime artifacts
+*.log
+logs/
+tmp/
+temp/
+
+# environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# typescript cache
+*.tsbuildinfo
+
+# test/coverage
+coverage/
+
+# misc
+.DS_Store
+
+# editor
+.vscode/
+.idea/
