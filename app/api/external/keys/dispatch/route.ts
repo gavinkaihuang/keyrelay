@@ -45,14 +45,15 @@ export async function POST(request: NextRequest) {
   try {
     const dispatched = await prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<DispatchRow[]>`
-        SELECT id, platform, name, secret_key
-        FROM keys
-        WHERE platform = ${platform}
+        SELECT k.id, p.name AS platform, k.name, k.secret_key
+        FROM keys k
+        JOIN platforms p ON p.id = k.platform_id
+        WHERE p.name = ${platform}
           AND (
-            LOWER(status) = 'active'
-            OR (LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW())
+            LOWER(k.status) = 'active'
+            OR (LOWER(k.status) = 'cooling' AND k.cooling_until IS NOT NULL AND k.cooling_until < NOW())
           )
-        ORDER BY last_used_at ASC
+        ORDER BY k.last_used_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       `;

@@ -8,7 +8,7 @@ datasource db {
 
 model Key {
   id            String     @id @default(uuid()) @db.Uuid
-  platform      String
+  platform_id   String     @db.Uuid
   name          String
   secret_key    String
   key_preview   String?
@@ -18,11 +18,24 @@ model Key {
   last_error    String?
   fail_count    Int        @default(0)
   created_at    DateTime   @default(now())
+  platform_ref  Platform   @relation(fields: [platform_id], references: [id], onDelete: Restrict)
   usage_logs    UsageLog[]
 
+  @@index([platform_id])
   @@index([last_used_at])
   @@index([created_at])
   @@map("keys")
+}
+
+model Platform {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @unique
+  icon       String?
+  created_at DateTime @default(now())
+  keys       Key[]
+
+  @@index([created_at])
+  @@map("platforms")
 }
 
 model UsageLog {

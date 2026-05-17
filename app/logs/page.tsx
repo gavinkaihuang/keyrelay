@@ -12,7 +12,11 @@ export default async function LogsPage() {
       key: {
         select: {
           name: true,
-          platform: true,
+          platform_ref: {
+            select: {
+              name: true,
+            },
+          },
         },
       },
     },
@@ -68,7 +72,7 @@ export default async function LogsPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3">{log.key?.name ?? "Unknown"}</td>
-                    <td className="px-3 py-3">{log.key?.platform ?? "-"}</td>
+                    <td className="px-3 py-3">{log.key?.platform_ref?.name ?? "-"}</td>
                     <td className="px-3 py-3 text-stone-500">{log.error_message ?? "-"}</td>
                   </tr>
                 ))}

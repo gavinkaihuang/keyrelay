@@ -87,7 +87,7 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 接口名称：addKey(previousState, formData)
 用途：新增 Key（原始 Key 会加密后落库）。
 入参：
-- formData.platform: OpenAI | Claude | DeepSeek | Gemini
+- formData.platform: 平台标识字符串（例如 OpenAI / Qwen / Kimi）
 - formData.secretKey: 原始 Key（必填）
 - formData.name: Key 别名（可选）
 返回示例：
@@ -129,7 +129,7 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 接口名称：dispatchKey(platform)
 用途：高可靠分发指定平台下一个可用 Key。
 入参：
-- platform: OpenAI | Claude | DeepSeek | Gemini
+- platform: 平台标识字符串（例如 OpenAI / Qwen / Kimi）
 筛选条件：
 - status = active，或 status = cooling 且 cooling_until < now()
 分发策略：
@@ -181,13 +181,13 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
 7.2 已开放外部 API
 
 - GET /api/external/keys
-  - 用途：查询 Key 列表（支持 ?platform=OpenAI|Claude|DeepSeek|Gemini）
+  - 用途：查询 Key 列表（支持 ?platform=<任意平台标识>）
 
 - POST /api/external/keys
   - 用途：新增 Key
   - 请求体：
     {
-      "platform": "OpenAI",
+      "platform": "Qwen",
       "name": "Primary GPT",
       "secretKey": "sk-xxxx"
     }
@@ -196,7 +196,7 @@ curl -X GET "http://localhost:3000/api/cron/recover-keys"
   - 用途：分发可用 Key（并发安全）
   - 请求体：
     {
-      "platform": "OpenAI"
+      "platform": "Qwen"
     }
 
 - POST /api/keys/callback

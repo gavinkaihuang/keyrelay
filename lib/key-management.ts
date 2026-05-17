@@ -1,11 +1,16 @@
-export const platforms = ["OpenAI", "Claude", "DeepSeek", "Gemini"] as const;
 export const resettableStatuses = ["cooling", "disabled", "depleted"] as const;
 
-export type Platform = (typeof platforms)[number];
+export type Platform = string;
+export type PlatformOption = {
+  id: string;
+  name: string;
+  icon: string | null;
+};
 export type KeyStatus = "active" | (typeof resettableStatuses)[number];
 
 export type KeyListItem = {
   id: string;
+  platformId: string;
   platform: Platform;
   name: string;
   keyPreview: string;
@@ -28,7 +33,14 @@ export type DispatchedKey = {
 };
 
 export function isPlatform(value: string): value is Platform {
-  return platforms.includes(value as Platform);
+  const normalized = value.trim();
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(normalized);
+}
+
+export function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
 }
 
 export function maskSecretKey(secretKey: string) {

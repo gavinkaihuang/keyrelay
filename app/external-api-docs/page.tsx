@@ -25,7 +25,7 @@ const apiDocs: ApiEndpoint[] = [
     summary: "查询当前 Key 列表，支持按平台过滤。",
     curl: `curl -X GET "${baseUrl}/api/external/keys" \\
   -H "X-KeyRelay-Token: <YOUR_TOKEN>"`,
-    notes: "支持查询参数 platform=OpenAI|Claude|DeepSeek|Gemini。",
+    notes: "支持查询参数 platform=<任意平台标识>（例如 OpenAI、Qwen、Kimi）。",
   },
   {
     id: "create-key",
@@ -37,7 +37,7 @@ const apiDocs: ApiEndpoint[] = [
   -H "Content-Type: application/json" \\
   -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
   -d '{
-    "platform": "OpenAI",
+    "platform": "Qwen",
     "name": "Primary GPT",
     "secretKey": "sk-xxxx"
   }'`,
@@ -52,7 +52,7 @@ const apiDocs: ApiEndpoint[] = [
   -H "Content-Type: application/json" \\
   -H "X-KeyRelay-Token: <YOUR_TOKEN>" \\
   -d '{
-    "platform": "OpenAI",
+    "platform": "Qwen",
     "projectName": "order-service"
   }'`,
     notes:
@@ -95,6 +95,33 @@ const apiDocs: ApiEndpoint[] = [
       "重点接口：根据错误类型自动将 Key 调整为 cooling / disabled / depleted，并写入 usage_logs(fail)。",
   },
 ];
+
+const llmUsagePrompt = `你是一个帮助我集成 KeyRelay 的 API 调用助手。请基于下面规则协助我生成、解释和修正 KeyRelay 的请求示例，并在信息不足时先提出最少必要的澄清问题。
+
+项目目标：
+- KeyRelay 用于管理多平台 LLM API Key，支持按平台新增、列表、分发、删除、重置和错误回调。
+- 外部系统优先调用分发接口获取可用 Key；下游出错后通过回调接口上报错误，系统会自动调整 Key 状态。
+
+基础信息：
+- Base URL: http://localhost:3000
+- 外部 API Header: X-KeyRelay-Token: <YOUR_TOKEN>
+- 回调 API Header: x-callback-token: <CALLBACK_SECRET>
+- 可选 Header: Authorization: Bearer <YOUR_TOKEN>
+
+接口约定：
+- GET /api/external/keys：列出 Key，支持 platform 过滤。
+- POST /api/external/keys：新增 Key，JSON 包含 platform、name、secretKey。
+- POST /api/external/keys/dispatch：分发可用 Key，JSON 包含 platform、projectName。
+- DELETE /api/external/keys/:id：删除指定 Key。
+- POST /api/external/keys/:id/reset：重置 cooling、disabled 或 depleted 状态的 Key。
+- POST /api/keys/callback：按错误类型更新 Key 生命周期并记录失败日志，JSON 包含 keyId、projectName、rawError。
+
+输出要求：
+- 生成适合直接运行的 curl、fetch、Node.js、Python 请求示例。
+- 保持参数名和路径严格一致，不要自行改名。
+- 如果平台名、Token、Key ID 或错误码不明确，先说明缺失项，再给出可替换模板。
+- 返回内容尽量简洁，优先给可复制的请求片段和必要说明。
+- 如果我要求“根据某个平台写完整接入示例”，请同时给出请求、成功返回处理、错误返回处理和重试建议。`;
 
 export default function ExternalApiDocsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(apiDocs[0]?.id ?? null);
@@ -140,6 +167,14 @@ export default function ExternalApiDocsPage() {
             </span>
             上报失败并自动管理 Key 生命周期。
           </p>
+        </section>
+
+        <section className="panel rounded-[30px] p-6 sm:p-8">
+          <h2 className="text-xl font-semibold text-stone-900">LLM 使用提示词</h2>
+          <p className="mt-2 text-sm leading-7 text-stone-600 sm:text-base">
+            下面这段提示词可以直接复制给其他 LLM，用来让它帮助你生成 KeyRelay 的接入示例和调用说明。
+          </p>
+          <CodeBlock code={llmUsagePrompt} />
         </section>
 
         <section className="panel rounded-[30px] p-6 sm:p-8">

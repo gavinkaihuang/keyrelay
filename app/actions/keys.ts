@@ -1,12 +1,11 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { ensureKeySchemaHealthCheck, prisma } from "../../lib/prisma";
 import { encrypt } from "../../lib/encrypt";
 import {
   isPlatform,
+  isUuid,
   maskSecretKey,
   normalizeKeyStatus,
   type ActionResult,
@@ -14,27 +13,34 @@ import {
   type KeyListItem,
 } from "../../lib/key-management";
 
-function isMissingColumnError(error: unknown) {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2022"
-  );
+type PlatformRef = {
+  id: string;
+  name: string;
+};
+
+async function resolvePlatformById(platformId: string): Promise<PlatformRef | null> {
+  if (!isUuid(platformId)) {
+    return null;
+  }
+
+  return prisma.platform.findUnique({
+    where: {
+      id: platformId,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
 }
 
 export async function addKey(
   _previousState: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const platform = String(formData.get("platform") ?? "").trim();
+  const platformId = String(formData.get("platformId") ?? "").trim();
   const secretKey = String(formData.get("secretKey") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-
-  if (!isPlatform(platform)) {
-    return {
-      success: false,
-      message: "Invalid platform.",
-    };
-  }
 
   if (!secretKey) {
     return {
@@ -43,27 +49,24 @@ export async function addKey(
     };
   }
 
-  try {
-    await prisma.key.create({
-      data: {
-        platform,
-        name: name || `${platform} Key`,
-        secret_key: encrypt(secretKey),
-        key_preview: maskSecretKey(secretKey),
-        status: "active",
-      },
-    });
-  } catch (error) {
-    // Compatibility path for databases that have not applied key_preview migration yet.
-    if (!isMissingColumnError(error)) {
-      throw error;
-    }
+  const platform = await resolvePlatformById(platformId);
 
-    await prisma.$executeRaw`
-      INSERT INTO keys (id, platform, name, secret_key, status, last_used_at, fail_count)
-      VALUES (${randomUUID()}::uuid, ${platform}, ${name || `${platform} Key`}, ${encrypt(secretKey)}, 'active', NOW(), 0)
-    `;
+  if (!platform) {
+    return {
+      success: false,
+      message: "Invalid platform.",
+    };
   }
+
+  await prisma.key.create({
+    data: {
+      platform_id: platform.id,
+      name: name || `${platform.name} Key`,
+      secret_key: encrypt(secretKey),
+      key_preview: maskSecretKey(secretKey),
+      status: "active",
+    },
+  });
 
   revalidatePath("/");
 
@@ -78,18 +81,20 @@ export async function updateKey(
   formData: FormData,
 ): Promise<ActionResult> {
   const id = String(formData.get("id") ?? "").trim();
-  const platform = String(formData.get("platform") ?? "").trim();
+  const platformId = String(formData.get("platformId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const secretKey = String(formData.get("secretKey") ?? "").trim();
 
-  if (!id) {
+  if (!isUuid(id)) {
     return {
       success: false,
       message: "Key id is required.",
     };
   }
 
-  if (!isPlatform(platform)) {
+  const platform = await resolvePlatformById(platformId);
+
+  if (!platform) {
     return {
       success: false,
       message: "Invalid platform.",
@@ -103,50 +108,27 @@ export async function updateKey(
     };
   }
 
-  try {
-    const result = await prisma.key.updateMany({
-      where: {
-        id,
-      },
-      data: {
-        platform,
-        name,
-        ...(secretKey
-          ? {
-              secret_key: encrypt(secretKey),
-              key_preview: maskSecretKey(secretKey),
-            }
-          : {}),
-      },
-    });
+  const result = await prisma.key.updateMany({
+    where: {
+      id,
+    },
+    data: {
+      platform_id: platform.id,
+      name,
+      ...(secretKey
+        ? {
+            secret_key: encrypt(secretKey),
+            key_preview: maskSecretKey(secretKey),
+          }
+        : {}),
+    },
+  });
 
-    if (result.count === 0) {
-      return {
-        success: false,
-        message: "Key not found.",
-      };
-    }
-  } catch (error) {
-    if (!isMissingColumnError(error)) {
-      throw error;
-    }
-
-    if (secretKey) {
-      await prisma.$executeRaw`
-        UPDATE keys
-        SET platform = ${platform},
-            name = ${name},
-            secret_key = ${encrypt(secretKey)}
-        WHERE id = ${id}::uuid
-      `;
-    } else {
-      await prisma.$executeRaw`
-        UPDATE keys
-        SET platform = ${platform},
-            name = ${name}
-        WHERE id = ${id}::uuid
-      `;
-    }
+  if (result.count === 0) {
+    return {
+      success: false,
+      message: "Key not found.",
+    };
   }
 
   revalidatePath("/");
@@ -167,7 +149,13 @@ export async function getKeys(): Promise<KeyListItem[]> {
       },
       select: {
         id: true,
-        platform: true,
+        platform_id: true,
+        platform_ref: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         name: true,
         key_preview: true,
         status: true,
@@ -178,7 +166,8 @@ export async function getKeys(): Promise<KeyListItem[]> {
 
     return keys.map((item) => ({
       id: item.id,
-      platform: item.platform as KeyListItem["platform"],
+      platformId: item.platform_id,
+      platform: item.platform_ref.name,
       name: item.name,
       keyPreview: item.key_preview ?? "",
       status: normalizeKeyStatus(item.status),
@@ -186,34 +175,7 @@ export async function getKeys(): Promise<KeyListItem[]> {
       createdAt: item.created_at.toISOString(),
     }));
   } catch (error) {
-    // Compatibility path for legacy schema without key_preview/created_at columns.
-    if (!isMissingColumnError(error)) {
-      throw error;
-    }
-
-    const legacyKeys = await prisma.key.findMany({
-      orderBy: {
-        last_used_at: "asc",
-      },
-      select: {
-        id: true,
-        platform: true,
-        name: true,
-        secret_key: true,
-        status: true,
-        last_used_at: true,
-      },
-    });
-
-    return legacyKeys.map((item) => ({
-      id: item.id,
-      platform: item.platform as KeyListItem["platform"],
-      name: item.name,
-      keyPreview: maskSecretKey(item.secret_key),
-      status: normalizeKeyStatus(item.status),
-      lastUsedAt: item.last_used_at.toISOString(),
-      createdAt: item.last_used_at.toISOString(),
-    }));
+    throw error;
   }
 }
 
@@ -268,14 +230,15 @@ export async function dispatchKey(platform: string): Promise<DispatchedKey> {
   return prisma.$transaction(async (tx) => {
     // Lock one candidate row to avoid dispatching the same key under concurrency.
     const rows = await tx.$queryRaw<DispatchRow[]>`
-      SELECT id, platform, name, secret_key
-      FROM keys
-      WHERE platform = ${platform}
+      SELECT k.id, p.name AS platform, k.name, k.secret_key
+      FROM keys k
+      JOIN platforms p ON p.id = k.platform_id
+      WHERE p.name = ${platform}
         AND (
-          LOWER(status) = 'active'
-          OR (LOWER(status) = 'cooling' AND cooling_until IS NOT NULL AND cooling_until < NOW())
+          LOWER(k.status) = 'active'
+          OR (LOWER(k.status) = 'cooling' AND k.cooling_until IS NOT NULL AND k.cooling_until < NOW())
         )
-      ORDER BY last_used_at ASC
+      ORDER BY k.last_used_at ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 1
     `;

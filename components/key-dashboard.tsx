@@ -17,12 +17,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { addKey, deleteKey, resetKeyStatus, updateKey } from "../app/actions/keys";
+import { addPlatform } from "../app/actions/platforms";
 import {
-  platforms,
   type ActionResult,
   type KeyListItem,
   type KeyStatus,
-  type Platform,
+  type PlatformOption,
 } from "../lib/key-management";
 
 const addKeyInitialState: ActionResult = {
@@ -37,12 +37,19 @@ const statusStyles: Record<KeyStatus, string> = {
   depleted: "bg-rose-100 text-rose-800 ring-rose-600/15",
 };
 
-const platformMeta: Record<Platform, { icon: typeof Orbit; tone: string }> = {
+const platformMeta: Record<string, { icon: typeof Orbit; tone: string }> = {
   OpenAI: { icon: Orbit, tone: "bg-teal-100 text-teal-800" },
   Claude: { icon: Feather, tone: "bg-orange-100 text-orange-800" },
   DeepSeek: { icon: Radar, tone: "bg-sky-100 text-sky-800" },
   Gemini: { icon: Sparkles, tone: "bg-fuchsia-100 text-fuchsia-800" },
 };
+
+function getPlatformMeta(platform: string) {
+  return platformMeta[platform] ?? {
+    icon: Sparkles,
+    tone: "bg-stone-100 text-stone-700",
+  };
+}
 
 function formatLastUsed(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -65,11 +72,20 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
   const keys = initialKeys;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPlatformModalOpen, setIsPlatformModalOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<KeyListItem | null>(null);
   const [formState, formAction, isSubmitting] = useActionState(addKey, addKeyInitialState);
   const [editFormState, editFormAction, isEditSubmitting] = useActionState(updateKey, addKeyInitialState);
+  const [platformFormState, platformFormAction, isPlatformSubmitting] = useActionState(
+    addPlatform,
+    { success: false, message: "" },
+  );
+  const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
+  const [isLoadingPlatforms, setIsLoadingPlatforms] = useState(false);
+  const [platformsError, setPlatformsError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
+  const platformFormRef = useRef<HTMLFormElement>(null);
 
   const stats = useMemo(() => {
     const activeCount = keys.filter((item) => item.status === "active").length;
@@ -81,6 +97,57 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
       cooling: coolingCount,
     };
   }, [keys]);
+
+  const availablePlatformOptions = useMemo(() => {
+    if (!editingKey) {
+      return platformOptions;
+    }
+
+    const exists = platformOptions.some((item) => item.id === editingKey.platformId);
+
+    if (exists) {
+      return platformOptions;
+    }
+
+    return [
+      {
+        id: editingKey.platformId,
+        name: editingKey.platform,
+        icon: null,
+      },
+      ...platformOptions,
+    ];
+  }, [editingKey, platformOptions]);
+
+  async function loadPlatforms() {
+    setIsLoadingPlatforms(true);
+    setPlatformsError("");
+
+    try {
+      const response = await fetch("/api/platforms", {
+        method: "GET",
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            data?: PlatformOption[];
+            message?: string;
+          }
+        | null;
+
+      if (!response.ok || !payload?.success || !Array.isArray(payload.data)) {
+        throw new Error(payload?.message || "Failed to load platforms");
+      }
+
+      setPlatformOptions(payload.data);
+    } catch (error) {
+      setPlatformOptions([]);
+      setPlatformsError(error instanceof Error ? error.message : "Failed to load platforms");
+    } finally {
+      setIsLoadingPlatforms(false);
+    }
+  }
 
   function closeModal() {
     setIsModalOpen(false);
@@ -94,6 +161,10 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
   function closeEditModal() {
     setIsEditModalOpen(false);
     setEditingKey(null);
+  }
+
+  function closePlatformModal() {
+    setIsPlatformModalOpen(false);
   }
 
   useEffect(() => {
@@ -115,6 +186,28 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
     setEditingKey(null);
   }, [editFormState.success]);
 
+  useEffect(() => {
+    if (!platformFormState.success) {
+      return;
+    }
+
+    platformFormRef.current?.reset();
+    setIsPlatformModalOpen(false);
+    void loadPlatforms();
+  }, [platformFormState.success]);
+
+  useEffect(() => {
+    void loadPlatforms();
+  }, []);
+
+  useEffect(() => {
+    if (!isModalOpen && !isEditModalOpen && !isPlatformModalOpen) {
+      return;
+    }
+
+    void loadPlatforms();
+  }, [isModalOpen, isEditModalOpen, isPlatformModalOpen]);
+
   return (
     <main className="min-h-screen px-4 py-10 text-stone-900 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-8">
@@ -131,7 +224,7 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                     管理多平台 LLM Key 的状态、可用性与冷却窗口。
                   </h1>
                   <p className="max-w-2xl text-base leading-7 text-stone-600 sm:text-lg">
-                    一个面向运维场景的简洁控制台，聚合 OpenAI、Claude、DeepSeek 与 Gemini 的 API Key 使用状态。
+                    一个面向运维场景的简洁控制台，统一管理不同平台的 API Key 使用状态。
                   </p>
                 </div>
               </div>
@@ -156,6 +249,14 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                   <Plus className="h-4 w-4" />
                   Add New Key
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPlatformModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-stone-900/10 bg-white/75 px-5 py-3 text-sm font-medium text-stone-700 transition hover:bg-white"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Platform
+                </button>
               </div>
             </div>
 
@@ -178,8 +279,44 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
             </div>
             <div className="space-y-4 text-sm text-stone-600">
               <SummaryRow label="活跃池容量" value={`${stats.active}/${stats.total}`} />
-              <SummaryRow label="平台覆盖" value="4 providers" />
+              <SummaryRow
+                label="平台覆盖"
+                value={`${new Set(keys.map((item) => item.platform)).size} providers`}
+              />
               <SummaryRow label="自动脱敏展示" value="Enabled" />
+            </div>
+
+            <div className="mt-6 rounded-[24px] border border-black/6 bg-white/60 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm text-stone-500">平台管理</p>
+                  <h3 className="text-base font-semibold text-stone-900">已接入平台</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPlatformModalOpen(true)}
+                  className="rounded-full border border-teal-700/20 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 transition hover:bg-teal-100"
+                >
+                  Add Platform
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {platformOptions.length > 0 ? (
+                  platformOptions.map((platform) => (
+                    <span
+                      key={platform.id}
+                      className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-3 py-1.5 text-xs font-medium text-stone-700"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-teal-600" />
+                      {platform.name}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-sm text-stone-500">暂无平台数据，点击上方按钮创建一个平台。</p>
+                )}
+              </div>
+              {isLoadingPlatforms ? <p className="mt-3 text-xs text-stone-500">正在刷新平台列表...</p> : null}
+              {platformsError ? <p className="mt-3 text-xs text-red-600">{platformsError}</p> : null}
             </div>
           </div>
         </section>
@@ -206,7 +343,7 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
               </thead>
               <tbody>
                 {keys.map((item) => {
-                  const meta = platformMeta[item.platform];
+                  const meta = getPlatformMeta(item.platform);
                   const Icon = meta.icon;
                   const canReset = item.status !== "active";
 
@@ -297,13 +434,28 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
             <form ref={formRef} className="space-y-5" action={formAction}>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-stone-700">Platform</span>
-                <select name="platform" defaultValue="OpenAI" className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition focus:border-teal-700">
-                  {platforms.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
+                <select
+                  name="platformId"
+                  defaultValue={platformOptions[0]?.id ?? ""}
+                  required
+                  disabled={isLoadingPlatforms || platformOptions.length === 0}
+                  className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition focus:border-teal-700 disabled:cursor-not-allowed disabled:bg-stone-100"
+                >
+                  {platformOptions.length === 0 ? (
+                    <option value="">暂无可用平台</option>
+                  ) : null}
+                  {platformOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
                     </option>
                   ))}
                 </select>
+                {isLoadingPlatforms ? (
+                  <p className="text-xs text-stone-500">正在加载平台列表...</p>
+                ) : null}
+                {platformsError ? (
+                  <p className="text-xs text-red-600">{platformsError}</p>
+                ) : null}
               </label>
 
               <label className="block space-y-2">
@@ -342,10 +494,80 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-stone-50 transition hover:bg-teal-800"
+                  disabled={isSubmitting || isLoadingPlatforms || platformOptions.length === 0}
+                  className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-stone-50 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-stone-500"
                 >
                   {isSubmitting ? "Saving..." : "Save Key"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {isPlatformModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/30 px-4 backdrop-blur-sm">
+          <div className="panel w-full max-w-xl rounded-[28px] bg-[var(--surface-strong)] p-6 sm:p-8">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-stone-500">Create Platform</p>
+                <h3 className="mt-1 text-2xl font-semibold tracking-[-0.03em] text-stone-900">Add New Platform</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closePlatformModal}
+                className="rounded-full border border-stone-900/10 p-2 text-stone-500 transition hover:bg-stone-900/5 hover:text-stone-900"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form ref={platformFormRef} className="space-y-5" action={platformFormAction}>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-stone-700">Platform Name</span>
+                <input
+                  name="name"
+                  placeholder="例如：Qwen / Kimi / OpenRouter"
+                  required
+                  className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-teal-700"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-stone-700">Icon（可选）</span>
+                <input
+                  name="icon"
+                  placeholder="例如：🧠"
+                  className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-teal-700"
+                />
+              </label>
+
+              {platformFormState.message ? (
+                <div
+                  className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm ${
+                    platformFormState.success ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                  }`}
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  {platformFormState.message}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closePlatformModal}
+                  className="rounded-full border border-stone-900/10 px-4 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-900/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPlatformSubmitting}
+                  className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-stone-50 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-stone-500"
+                >
+                  {isPlatformSubmitting ? "Creating..." : "Save Platform"}
                 </button>
               </div>
             </form>
@@ -382,13 +604,18 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-stone-700">Platform</span>
                 <select
-                  name="platform"
-                  defaultValue={editingKey.platform}
-                  className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition focus:border-teal-700"
+                  name="platformId"
+                  defaultValue={editingKey.platformId}
+                  required
+                  disabled={isLoadingPlatforms || availablePlatformOptions.length === 0}
+                  className="w-full rounded-2xl border border-stone-900/10 bg-white/80 px-4 py-3 text-stone-900 outline-none transition focus:border-teal-700 disabled:cursor-not-allowed disabled:bg-stone-100"
                 >
-                  {platforms.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
+                  {availablePlatformOptions.length === 0 ? (
+                    <option value="">暂无可用平台</option>
+                  ) : null}
+                  {availablePlatformOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
                     </option>
                   ))}
                 </select>
@@ -436,8 +663,8 @@ export function KeyDashboard({ initialKeys }: { initialKeys: KeyListItem[] }) {
                 </button>
                 <button
                   type="submit"
-                  disabled={isEditSubmitting}
-                  className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-stone-50 transition hover:bg-teal-800"
+                  disabled={isEditSubmitting || isLoadingPlatforms || availablePlatformOptions.length === 0}
+                  className="rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-stone-50 transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-stone-500"
                 >
                   {isEditSubmitting ? "Updating..." : "Update Key"}
                 </button>
