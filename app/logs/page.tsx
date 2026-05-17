@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma";
+import { LocalDateTime } from "../../components/local-date-time";
 
 export const dynamic = "force-dynamic";
 
@@ -51,13 +52,7 @@ export default async function LogsPage() {
                 {logs.map((log) => (
                   <tr key={log.id} className="border-b border-black/6 text-stone-700">
                     <td className="px-3 py-3 whitespace-nowrap">
-                      {new Intl.DateTimeFormat("zh-CN", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      }).format(log.created_at)}
+                      <LocalDateTime value={log.created_at.toISOString()} />
                     </td>
                     <td className="px-3 py-3">{log.project_name}</td>
                     <td className="px-3 py-3">
